@@ -8,6 +8,7 @@ import (
 	"github.com/hugb/beegecontroller/utils"
 )
 
+// controller监听docker的连接
 func NewClusterServer() {
 	ln, err := net.Listen("tcp", config.CS.ClusterAddress)
 	if err != nil {

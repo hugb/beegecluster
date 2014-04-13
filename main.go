@@ -1,3 +1,7 @@
+///////////////////////////////////////////////////////////////////
+/*                          Controller                           */
+///////////////////////////////////////////////////////////////////
+// 提供API路由选择，以及集群管理
 package main
 
 import (
@@ -12,17 +16,17 @@ import (
 
 func main() {
 	var (
-		joinPoint      = flag.String("j", "", "Join Point")
+		joinPoint      = flag.String("j", "", "Join Point Address")
 		serviceAddress = flag.String("p", "", "Proxy Address")
 		clusterAddress = flag.String("c", "", "Cluster Address")
 	)
 	flag.Parse()
 
 	if *serviceAddress == "" {
-		log.Fatal("Proxy address can not be empty.")
+		log.Fatal("Proxy address is required.")
 	}
 	if *clusterAddress == "" {
-		log.Fatal("Cluster address can not be empty.")
+		log.Fatal("Cluster address is required.")
 	}
 
 	// 保存配置

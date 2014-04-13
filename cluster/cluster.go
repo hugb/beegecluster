@@ -29,10 +29,18 @@ func DockerJoinCluster() {
 		go connectController(value)
 	}
 
+	// todo:初始数据上报，包括镜像和容器
+
+	// todo:docker服务器状态上报
+
+	// todo:事件监听上报
+
 	select {}
 
 }
 
+// docker连接到controller，保持着
+// todo:reconnection，断开重试
 func connectController(address string) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -68,6 +76,7 @@ func connectController(address string) {
 	}
 }
 
+// 由入口地址得到所有的controller
 func getController(address, from string) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {

@@ -32,9 +32,11 @@ var ClusterSwitcher = &Switcher{
 }
 
 func init() {
+	// 启动交换器
 	go ClusterSwitcher.run()
 }
 
+// 连接管理以及数据广播
 func (this *Switcher) run() {
 	for {
 		select {

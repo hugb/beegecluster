@@ -71,12 +71,14 @@ func controllerOffline(c *utils.Connection, data []byte) {
 	log.Println("controller:", string(data), "is offline.")
 }
 
+// docker连接到controller的连接断开
 func DockerDisconnection(c *utils.Connection, data []byte) {
 	log.Println("docker:", string(data), "is offline.")
 	delete(config.CS.ClusterServer.Docker, string(data))
 	log.Println("dockers:", config.CS.ClusterServer.Docker)
 }
 
+// controller连接到docker的连接断开，广播给其他controller
 func ControllerDisconnection(c *utils.Connection, data []byte) {
 	log.Println("controller:", string(data), "is offline.")
 	ClusterSwitcher.Broadcast(utils.PacketByes(append(data, " controller_offline"...)))

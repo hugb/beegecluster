@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+
+	"github.com/hugb/beegecontroller/config"
 )
 
 type Proxy struct {
@@ -14,19 +16,18 @@ type Proxy struct {
 
 type HttpApiFunc func(w http.ResponseWriter, r *http.Request) error
 
-func NewProxyServer(address string) {
+func NewProxyServer() {
 	route, err := createRouter()
 	if err != nil {
 		panic(err)
 	}
 
-	protoAddrParts := strings.SplitN(address, "://", 2)
-	ln, err := net.Listen(protoAddrParts[0], protoAddrParts[1])
+	ln, err := net.Listen("tcp", config.CS.ServiceAddress)
 	if err != nil {
 		panic(err)
 	}
 
-	httpSrv := http.Server{Addr: protoAddrParts[1], Handler: route}
+	httpSrv := http.Server{Addr: config.CS.ServiceAddress, Handler: route}
 	if err = httpSrv.Serve(ln); err != nil {
 		panic(err)
 	}

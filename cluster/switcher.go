@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/hugb/beegecontroller/utils"

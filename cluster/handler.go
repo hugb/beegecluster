@@ -6,12 +6,18 @@ import (
 	"log"
 	"time"
 
+	"github.com/dotcloud/docker/engine"
+
 	"github.com/hugb/beegecontroller/config"
 	"github.com/hugb/beegecontroller/utils"
 )
 
 func ClusterHandlers() {
 	m := map[string]HandlerFunc{
+		"docker_status":           dockerStatus,
+		"docker_event":            dockerEvent,
+		"docker_images":           dockerImages,
+		"docker_containers":       dockerContainers,
 		"docker_greetings":        dockerGreetings,
 		"docker_join_cluster":     dockerJoinCluster,
 		"controller_join_cluster": controllerJoinCluster,
@@ -23,6 +29,38 @@ func ClusterHandlers() {
 		} else {
 			log.Printf("register cluster hander[%s] success.\n", cmd)
 		}
+	}
+}
+
+func dockerStatus(c *utils.Connection, data []byte) {
+	log.Println("Status:", string(data))
+}
+
+func dockerEvent(c *utils.Connection, data []byte) {
+	log.Println("Event:", string(data))
+}
+
+func dockerImages(c *utils.Connection, data []byte) {
+	dst := engine.NewTable("", 0)
+	if _, err := dst.ReadListFrom(data); err != nil {
+		log.Println("Read table error:", err)
+	}
+	if content, err := dst.ToListString(); err != nil {
+		log.Println("Table to string error:", err)
+	} else {
+		log.Println("Images:", content)
+	}
+}
+
+func dockerContainers(c *utils.Connection, data []byte) {
+	dst := engine.NewTable("", 0)
+	if _, err := dst.ReadListFrom(data); err != nil {
+		log.Println("Read table error:", err)
+	}
+	if content, err := dst.ToListString(); err != nil {
+		log.Println("Table to string error:", err)
+	} else {
+		log.Println("Containers:", content)
 	}
 }
 

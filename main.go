@@ -94,3 +94,25 @@ func main() {
 	cluster.DockerJoinCluster()
 }
 */
+/*
+
+///////////////////////////////////////////////////////////////////////
+flJoinPoint = flag.String([]string{"j", "-joinpoint"}, "", "Cluster join  point")
+// cluster module
+if *flJoinPoint == "" {
+	log.Fatal("Cluster join point is required.")
+}
+
+// 保存配置
+config.CS.JoinPoint = *flJoinPoint
+config.CS.ServiceAddress = flHosts.GetAll()[0]
+config.CS.ClusterServer.Controller[*flJoinPoint] = time.Now().Unix()
+config.CS.ClusterServer.Docker[flHosts.GetAll()[0]] = time.Now().Unix()
+
+// 与controller连接断开后，将向连接的所有controller广播
+cluster.ClusterSwitcher.Register("disconnect", cluster.ControllerDisconnection)
+
+// docker加入集群
+cluster.DockerJoinCluster(eng)
+//////////////////////////////////////////////////////////////////////
+*/

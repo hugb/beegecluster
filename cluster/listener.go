@@ -42,7 +42,7 @@ func serve(conn net.Conn) {
 		}
 
 		cmd, payload := utils.CmdDecode(lenght, data)
-		log.Printf("cmd:%s, payload:%s.", cmd, string(data))
+		log.Printf("cmd:%s, payload:%s.", cmd, string(payload))
 
 		if handler, exist := ClusterSwitcher.handlers[cmd]; exist {
 			handler(c, payload)

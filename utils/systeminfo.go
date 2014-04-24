@@ -161,8 +161,8 @@ func GetSwap() (*Swap, error) {
 	if err := syscall.Sysinfo(&sysinfo); err != nil {
 		return swap, err
 	}
-	swap.Total = sysinfo.Totalswap
-	swap.Free = sysinfo.Freeswap
+	swap.Total = uint64(sysinfo.Totalswap)
+	swap.Free = uint64(sysinfo.Freeswap)
 	swap.Used = swap.Total - swap.Free
 	return swap, nil
 }

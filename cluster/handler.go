@@ -25,9 +25,9 @@ func ClusterHandlers() {
 	}
 	for cmd, fct := range m {
 		if err := ClusterSwitcher.Register(cmd, fct); err != nil {
-			log.Printf("register cluster handler[%s] failure:%s.\n", cmd, err)
+			log.Printf("Register cluster handler[%s] failure:%s", cmd, err)
 		} else {
-			log.Printf("register cluster hander[%s] success.\n", cmd)
+			log.Printf("Register cluster hander[%s] success", cmd)
 		}
 	}
 }
@@ -64,54 +64,62 @@ func dockerContainers(c *utils.Connection, data []byte) {
 	}
 }
 
-// 来自docker问候
+// 注册资料
 func dockerGreetings(c *utils.Connection, data []byte) {
 	c.Src = string(data)
 	config.CS.ClusterServer.Docker[string(data)] = time.Now().Unix()
-	log.Println("docker:", string(data), "is online.")
-	log.Println("dockers:", config.CS.ClusterServer.Docker)
+	log.Println("Docker:", string(data), "is online.")
+	log.Println("Dockers:", config.CS.ClusterServer.Docker)
 }
 
+// 我收了个小弟
+// todo:是否要审核
+// 由于其知道我的名字我默认相信他
 func dockerJoinCluster(c *utils.Connection, data []byte) {
 	// 向集群结构配置里面添加新成员
 	config.CS.ClusterServer.Docker[string(data)] = time.Now().Unix()
-	// 返回集群中的controller给新成员，以便新成员连接到其他controller
+	// 返回组织中领导层所有人姓名以便小弟有事时着他们
 	b, err := json.Marshal(config.CS.ClusterServer.Controller)
 	if err != nil {
+		// 我收集的资料有误
 		c.SendFailsResult("docker_join_cluster", fmt.Sprintf("%s", err))
 	} else {
+		// 告知其组织的领导层所有人员姓名
 		c.SendSuccessResultBytes("docker_join_cluster", b)
 	}
 }
 
+// 结拜了个兄弟
 func controllerJoinCluster(c *utils.Connection, data []byte) {
 	address := string(data)
-	// 向集群结构配置里面添加新成员
+	// 把他名字记下来
 	config.CS.ClusterServer.Controller[address] = time.Now().Unix()
-	// 返回集群中的controller给新成员，以便新成员挨个通知其加入了集群
+	// 把我以前结拜的所有兄弟告诉他，让他们也认识一下
 	b, err := json.Marshal(config.CS.ClusterServer.Controller)
 	if err != nil {
 		c.SendFailsResult("controller_join_cluster", fmt.Sprintf("%s", err))
 	} else {
 		c.SendSuccessResultBytes("controller_join_cluster", b)
 	}
-	// 向连接到自己的所有docker广播有controller加入集群
-	// todo:连接到controller的新成员也会收到广播，应避免和本次返回的结果混淆
-	time.Sleep(1 * time.Second)
-	// 1秒后本连接已经关闭，广播和本次结果不会混淆
+	// 先断开连接，以免其收到广播我发给小弟的通知
+	c.Conn.Close()
+	// 告知我的所有小弟，我认了个兄弟，以后的进贡也要给他们一份
 	ClusterSwitcher.broadcast <- []byte(fmt.Sprintf("%s %s", address, "controller_join_cluster"))
-	log.Println("controllers", config.CS.ClusterServer.Controller)
+	log.Println("Controllers", config.CS.ClusterServer.Controller)
 }
 
-// controller离线
+// 小弟说我结拜的兄弟死了
 func controllerOffline(c *utils.Connection, data []byte) {
-	delete(config.CS.ClusterServer.Controller, string(data))
 	log.Println("controller:", string(data), "is offline.")
+	// 从生死簿中将他的名字抹去
+	delete(config.CS.ClusterServer.Controller, string(data))
+	log.Println("Controllers:", config.CS.ClusterServer.Controller)
 }
 
-// docker连接到controller的连接断开
+// 我的小弟死了
 func DockerDisconnection(c *utils.Connection, data []byte) {
 	log.Println("docker:", string(data), "is offline.")
+	// 从生死簿中将他的名字抹去
 	delete(config.CS.ClusterServer.Docker, string(data))
 	log.Println("dockers:", config.CS.ClusterServer.Docker)
 }

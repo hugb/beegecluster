@@ -16,18 +16,23 @@ import (
 	"github.com/hugb/beegecontroller/utils"
 )
 
-func ControllerJoinCluster() {
-	// 获取所有controller
-	getController(config.CS.JoinPoint, "controller")
+var connCloseCh chan string
 
-	log.Println("controllers", config.CS.ClusterServer.Controller)
+// 我要加入组织
+func ControllerJoinCluster() {
+	// 得到各个分社的领导人姓名
+	getController(config.CS.JoinPoint, "controller")
+	// 所有领导人
+	log.Println("Controllers:", config.CS.ClusterServer.Controller)
 }
 
 func DockerJoinCluster(eng *engine.Engine) {
-	// 获取所有controller
+	// 获取所有controller的集群内部通信地址
 	getController(config.CS.JoinPoint, "docker")
 
-	log.Println("controllers", config.CS.ClusterServer.Controller)
+	log.Println("Controllers:", config.CS.ClusterServer.Controller)
+
+	connCloseCh = make(chan string, 2)
 
 	// 连接所有controller
 	var wg sync.WaitGroup
@@ -35,23 +40,29 @@ func DockerJoinCluster(eng *engine.Engine) {
 		wg.Add(1)
 		go connectController(address, &wg)
 	}
-	// 等待所有连接完成
+	// 等待docker与controller所有连接完成
 	wg.Wait()
-	// todo:初始数据上报，包括镜像和容器
+
+	// 监听到连接断开进行重连
+	go reConnectController()
+
+	// 首付
 	reportImagesAndContainers(eng)
-	log.Println("report images and containers finish.")
-	// todo:docker服务器状态上报
+	log.Println("Report images and containers finish")
+
+	// 每月还贷
 	go reportStatus()
-	// todo:事件监听上报
+
+	// 事件上报
 	if err := reportEvents(eng); err != nil {
 		log.Println("Report event error:", err)
 	}
-	log.Println("event report finish.")
+	log.Println("Event report finish")
 }
 
 func reportImagesAndContainers(eng *engine.Engine) error {
 	// 读取镜像列表
-	log.Println("report images start.")
+	log.Println("Report images start.")
 	imageJob := eng.Job("images")
 	imageJob.Setenv("filter", "")
 	imageJob.Setenv("all", "0")
@@ -72,7 +83,7 @@ func reportImagesAndContainers(eng *engine.Engine) error {
 		return err
 	}
 	// 读取容器列表
-	log.Println("report containers start.")
+	log.Println("Report containers start")
 	containerJob := eng.Job("containers")
 	containerJob.Setenv("all", "1")
 	containerSrc, err := containerJob.Stdout.AddPipe()
@@ -94,7 +105,7 @@ func reportImagesAndContainers(eng *engine.Engine) error {
 
 func reportEvents(eng *engine.Engine) error {
 	job := eng.Job("events", "DockerAgent")
-	// 从当前到3214080000（100年）后
+	// 从当前到3214080000（100年）后,^-^100后我都不在了，还需要考虑超时吗
 	job.Setenv("since", fmt.Sprint(time.Now().Unix()))
 	job.Setenv("until", fmt.Sprint(time.Now().Unix()+3214080000))
 	reader, err := job.Stdout.AddPipe()
@@ -107,12 +118,12 @@ func reportEvents(eng *engine.Engine) error {
 		for {
 			m := &dockerUtils.JSONMessage{}
 			if err := dec.Decode(m); err != nil {
-				log.Printf("Error streaming events: %s", err)
+				log.Printf("Error streaming events: %s\n", err)
 				break
 			}
 			if b, err := json.Marshal(m); err == nil {
 				// 广播
-				log.Println("event:", string(b))
+				log.Println("Event:", string(b))
 				content := utils.PacketByes(append(b, " docker_event"...))
 				ClusterSwitcher.Broadcast(content)
 			}
@@ -123,7 +134,7 @@ func reportEvents(eng *engine.Engine) error {
 }
 
 func reportStatus() {
-	log.Println("report status start.")
+	log.Println("Report status start")
 	tick := time.Tick(time.Duration(5) * time.Second)
 	for {
 		select {
@@ -132,6 +143,7 @@ func reportStatus() {
 			if err != nil {
 				log.Println("Get system info error:", err)
 			}
+			// 包含cpu使用率，内存，交换区和负载信息
 			systemInfoBytes, err := json.Marshal(systemInfo)
 			if err != nil {
 				log.Println("Encode system info error:", err)
@@ -141,42 +153,50 @@ func reportStatus() {
 			ClusterSwitcher.Broadcast(data)
 		}
 	}
-	log.Println("report status finish.")
+	log.Println("Report status finish")
 }
 
 // docker连接到controller，保持着
-// todo:reconnection，断开重试
 func connectController(address string, wg *sync.WaitGroup) {
-	conn, err := net.Dial("tcp", address)
+	var (
+		length     int
+		exist      bool
+		err        error
+		cmd        string
+		code       string
+		data       []byte
+		payload    []byte
+		conn       net.Conn
+		handler    HandlerFunc
+		connection *utils.Connection
+	)
+	conn, err = net.Dial("tcp", address)
 	if err != nil {
 		panic(err)
 	}
-
-	c := &utils.Connection{
+	connection = &utils.Connection{
 		Conn: conn,
 		Src:  address,
 	}
-	ClusterSwitcher.register <- c
+	ClusterSwitcher.register <- connection
 
 	defer func() {
 		conn.Close()
-		ClusterSwitcher.unregister <- c
+		connCloseCh <- address
+		ClusterSwitcher.unregister <- connection
 	}()
 
 	wg.Done()
-	c.SendCommandString("docker_greetings", config.CS.ServiceAddress)
+	connection.SendCommandString("docker_greetings", config.CS.ServiceAddress)
 
 	for {
-		lenght, data, err := c.Read()
-		if err != nil {
+		if length, data, err = connection.Read(); err != nil {
 			break
 		}
-
-		cmd, code, payload := utils.CmdResultDecode(lenght, data)
-		log.Printf("cmd:%s,code:%s,data:%s", cmd, code, string(payload))
-
-		if handler, exist := ClusterSwitcher.handlers[cmd]; exist {
-			handler(c, payload)
+		cmd, code, payload = utils.CmdResultDecode(length, data)
+		log.Printf("Cmd:%s,code:%s,data:%s", cmd, code, string(payload))
+		if handler, exist = ClusterSwitcher.handlers[cmd]; exist {
+			handler(connection, payload)
 		}
 	}
 }
@@ -188,35 +208,31 @@ func getController(address, from string) {
 		panic(err)
 	}
 
-	c := &utils.Connection{
-		Conn: conn,
-	}
+	connection := &utils.Connection{Conn: conn}
 
-	defer func() {
-		conn.Close()
-	}()
+	defer func() { conn.Close() }()
 
 	if from == "docker" {
-		c.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ServiceAddress)
+		connection.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ServiceAddress)
 	}
 	if from == "controller" {
-		c.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ClusterAddress)
+		connection.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ClusterAddress)
 	}
 
-	lenght, data, err := c.Read()
+	lenght, data, err := connection.Read()
 	if err != nil {
 		return
 	}
 
 	cmd, code, payload := utils.CmdResultDecode(lenght, data)
-	log.Printf("cmd:%s, code:%s, payload:%s", cmd, code, string(payload))
+	log.Printf("Cmd:%s, code:%s, payload:%s", cmd, code, string(payload))
 	if code == utils.FAILURE {
 		return
 	}
 
 	var controllers map[string]int64
 	if err = json.Unmarshal(payload, &controllers); err != nil {
-		log.Println("decode json error:", err)
+		log.Println("Decode json error:", err)
 	}
 
 	for address, _ := range controllers {
@@ -224,5 +240,22 @@ func getController(address, from string) {
 			config.CS.ClusterServer.Controller[address] = time.Now().Unix()
 			getController(address, from)
 		}
+	}
+}
+
+// 重新连接到Controller
+func reConnectController() {
+	var (
+		address   string
+		waitGroup sync.WaitGroup
+	)
+	for {
+		address = <-connCloseCh
+
+		waitGroup.Add(1)
+		connectController(address, &waitGroup)
+		waitGroup.Wait()
+		// todo:是否需要再次上报
+
 	}
 }

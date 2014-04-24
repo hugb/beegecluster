@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -17,7 +18,12 @@ type Proxy struct {
 type HttpApiFunc func(w http.ResponseWriter, r *http.Request) error
 
 func NewProxyServer() {
-	route, err := createRouter()
+	proxy := &Proxy{
+		Transport: &http.Transport{
+			ResponseHeaderTimeout: time.Duration(5) * time.Second,
+		},
+	}
+	route, err := proxy.createRouter()
 	if err != nil {
 		panic(err)
 	}
@@ -33,17 +39,16 @@ func NewProxyServer() {
 	}
 }
 
-func createRouter() (*mux.Router, error) {
-	/*p := &Proxy{
-		Transport: &http.Transport{ResponseHeaderTimeout: time.Duration(5) * time.Second},
-	}*/
-	r := mux.NewRouter()
-	m := map[string]map[string]HttpApiFunc{
-		"GET":    {},
+func (this *Proxy) createRouter() (*mux.Router, error) {
+	router := mux.NewRouter()
+	routerMap := map[string]map[string]HttpApiFunc{
+		"GET": {
+			"test": this.test,
+		},
 		"POST":   {},
 		"DELETE": {},
 	}
-	for method, routes := range m {
+	for method, routes := range routerMap {
 		for route, fct := range routes {
 			localFct := fct
 			localRoute := route
@@ -52,15 +57,15 @@ func createRouter() (*mux.Router, error) {
 			f := makeHttpHandler(localFct)
 
 			if localRoute == "" {
-				r.Methods(localMethod).HandlerFunc(f)
+				router.Methods(localMethod).HandlerFunc(f)
 			} else {
-				r.Path(localRoute).Methods(localMethod).HandlerFunc(f)
-				r.Path("/v{version:[0-9.]+}" + localRoute).Methods(localMethod).HandlerFunc(f)
+				router.Path(localRoute).Methods(localMethod).HandlerFunc(f)
+				router.Path("/v{version:[0-9.]+}" + localRoute).Methods(localMethod).HandlerFunc(f)
 			}
 		}
 	}
 
-	return r, nil
+	return router, nil
 }
 
 func makeHttpHandler(handlerFunc HttpApiFunc) http.HandlerFunc {
@@ -76,12 +81,7 @@ func makeHttpHandler(handlerFunc HttpApiFunc) http.HandlerFunc {
 }
 
 // 根据错误生成不同的http错误响应
-//
 func httpError(w http.ResponseWriter, err error) {
-	if err == nil {
-		return
-	}
-
 	statusCode := http.StatusInternalServerError
 	if strings.Contains(err.Error(), "No such") {
 		statusCode = http.StatusNotFound
@@ -95,45 +95,45 @@ func httpError(w http.ResponseWriter, err error) {
 		statusCode = http.StatusUnauthorized
 	} else if strings.Contains(err.Error(), "hasn't been activated") {
 		statusCode = http.StatusForbidden
-	} else {
-		//http.StatusInternalServerError
 	}
 
 	http.Error(w, err.Error(), statusCode)
 }
 
 // 代理到后端web服务器
-func (this *Proxy) httpProxy(host string, responseWriter http.ResponseWriter, request *http.Request) {
-	handler := NewRequestHandler(request, responseWriter)
+func (this *Proxy) httpProxy(host string, w http.ResponseWriter, r *http.Request) {
+	handler := requestHandler{
+		request:  r,
+		response: w,
+	}
 	// 仅支持http1.0和1.1
 	if !isProtocolSupported(request) {
-		handler.HandleUnsupportedProtocol()
+		handler.unsupportedProtocol()
 		return
 	}
 	// 负载均衡健康检查
 	if isLoadBalancerHeartbeat(request) {
-		handler.HandleHeartbeat()
+		handler.heartbeat()
 		return
 	}
 	if host == "" {
-		handler.HandleMissingRoute()
+		handler.missingRoute(host)
 		return
 	}
 	if isTcpUpgrade(request) {
-		handler.HandleTcpRequest(host)
+		handler.tcpRequest(host)
 		return
 	}
 	// websocket代理支持
 	if isWebSocketUpgrade(request) {
-		handler.HandleWebSocketRequest(host)
+		handler.webSocketRequest(host)
 		return
 	}
-	response, err := handler.HandleHttpRequest(this.Transport, host)
-	if err != nil {
-		handler.HandleBadGateway(err)
-		return
+	if response, err := handler.httpRequest(this.Transport, host); err != nil {
+		handler.badGateway(err)
+	} else {
+		handler.writeResponse(response)
 	}
-	handler.WriteResponse(response)
 }
 
 func isProtocolSupported(request *http.Request) bool {

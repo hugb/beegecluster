@@ -11,19 +11,16 @@ import (
 	"time"
 )
 
-type RequestHandler struct {
+func (this *Proxy) test(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+type requestHandler struct {
 	request  *http.Request
 	response http.ResponseWriter
 }
 
-func NewRequestHandler(request *http.Request, response http.ResponseWriter) RequestHandler {
-	return RequestHandler{
-		request:  request,
-		response: response,
-	}
-}
-
-func (this *RequestHandler) HandleUnsupportedProtocol() {
+func (this *requestHandler) unsupportedProtocol() {
 	hijacker, ok := this.response.(http.Hijacker)
 	if !ok {
 		panic("response writer cannot hijack")
@@ -40,12 +37,12 @@ func (this *RequestHandler) HandleUnsupportedProtocol() {
 	client.Close()
 }
 
-func (this *RequestHandler) HandleHeartbeat() {
+func (this *requestHandler) heartbeat() {
 	this.response.WriteHeader(http.StatusOK)
 	this.response.Write([]byte("ok\n"))
 }
 
-func (this *RequestHandler) HandleMissingRoute() {
+func (this *requestHandler) missingRoute(host string) {
 	this.response.Header().Set("X-RouterError", "unknown_route")
 	message := fmt.Sprintf("Requested route ('%s') does not exist.",
 		this.request.Host)
@@ -54,9 +51,8 @@ func (this *RequestHandler) HandleMissingRoute() {
 	http.Error(this.response, body, http.StatusNotFound)
 }
 
-func (this *RequestHandler) HandleTcpRequest(address string) {
-	err := this.serveTcp(address)
-	if err != nil {
+func (this *requestHandler) tcpRequest(address string) {
+	if err := this.serveTcp(address); err != nil {
 		body := fmt.Sprintf("%d %s: %s", http.StatusBadRequest,
 			http.StatusText(http.StatusBadRequest),
 			"TCP forwarding to endpoint failed.")
@@ -64,7 +60,7 @@ func (this *RequestHandler) HandleTcpRequest(address string) {
 	}
 }
 
-func (this *RequestHandler) HandleWebSocketRequest(address string) {
+func (this *requestHandler) webSocketRequest(address string) {
 	this.request.URL.Scheme = "http"
 	this.request.URL.Host = address
 
@@ -87,7 +83,7 @@ func (this *RequestHandler) HandleWebSocketRequest(address string) {
 	}
 }
 
-func (this *RequestHandler) HandleBadGateway(err error) {
+func (this *requestHandler) badGateway(err error) {
 	this.response.Header().Set("X-Cf-RouterError", "endpoint_failure")
 	body := fmt.Sprintf("%d %s: %s", http.StatusBadGateway,
 		http.StatusText(http.StatusBadGateway),
@@ -95,7 +91,7 @@ func (this *RequestHandler) HandleBadGateway(err error) {
 	http.Error(this.response, body, http.StatusBadGateway)
 }
 
-func (this *RequestHandler) HandleHttpRequest(transport *http.Transport, address string) (*http.Response, error) {
+func (this *requestHandler) httpRequest(transport *http.Transport, address string) (*http.Response, error) {
 	this.request.URL.Scheme = "http"
 	this.request.URL.Host = address
 
@@ -127,7 +123,7 @@ func (this *RequestHandler) HandleHttpRequest(transport *http.Transport, address
 	return response, err
 }
 
-func (this *RequestHandler) WriteResponse(response *http.Response) int64 {
+func (this *requestHandler) writeResponse(response *http.Response) int64 {
 	this.response.WriteHeader(response.StatusCode)
 	if response.Body == nil {
 		return 0
@@ -146,7 +142,7 @@ func (this *RequestHandler) WriteResponse(response *http.Response) int64 {
 	return written
 }
 
-func (this *RequestHandler) serveTcp(address string) error {
+func (this *requestHandler) serveTcp(address string) error {
 	hijacker, ok := this.response.(http.Hijacker)
 	if !ok {
 		panic("response writer cannot hijack")
@@ -170,7 +166,7 @@ func (this *RequestHandler) serveTcp(address string) error {
 	return nil
 }
 
-func (this *RequestHandler) serveWebSocket(address string) error {
+func (this *requestHandler) serveWebSocket(address string) error {
 	hijacker, ok := this.response.(http.Hijacker)
 	if !ok {
 		panic("response writer cannot hijack")

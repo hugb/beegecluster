@@ -1,3 +1,7 @@
+//////////////////////////////////////////////////////////
+/* 监听一个端口，等待docker链接，完成controller与docker的通信 */
+//////////////////////////////////////////////////////////
+
 package cluster
 
 import (
@@ -23,17 +27,18 @@ func NewClusterServer() {
 			go serve(conn)
 		}
 	}
+	panic("Cluster communication server stops")
 }
 
 // 从连接中读取数据，解析并调用相应handler响应
 func serve(conn net.Conn) {
 	var (
-		exist      bool
+		n          int
+		ok         bool
 		err        error
 		cmd        string
 		data       []byte
 		payload    []byte
-		length     int
 		handler    HandlerFunc
 		connection *utils.Connection
 	)
@@ -42,20 +47,23 @@ func serve(conn net.Conn) {
 	ClusterSwitcher.register <- connection
 
 	defer func() {
-		conn.Close()
 		ClusterSwitcher.unregister <- connection
+		conn.Close()
 	}()
 
 	for {
-		if length, data, err = connection.Read(); err != nil {
+		if n, data, err = connection.Read(); err != nil {
 			break
 		}
-		cmd, payload = utils.CmdDecode(length, data)
-		log.Printf("Cmd:%s, payload:%s", cmd, string(payload))
-		if handler, exist = ClusterSwitcher.handlers[cmd]; exist {
+		cmd, payload = utils.CmdDecode(n, data)
+
+		log.Printf("Controller receive Cmd:%s, payload:%s", cmd, string(payload))
+
+		if handler, ok = ClusterSwitcher.handlers[cmd]; ok {
 			handler(connection, payload)
 		} else {
 			connection.SendFailsResult(cmd, "Command does not exist")
 		}
 	}
+	log.Printf("Docker %s is disconnect", conn.RemoteAddr().String())
 }

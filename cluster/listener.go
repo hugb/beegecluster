@@ -65,5 +65,4 @@ func serve(conn net.Conn) {
 			connection.SendFailsResult(cmd, "Command does not exist")
 		}
 	}
-	log.Printf("Docker %s is disconnect", conn.RemoteAddr().String())
 }

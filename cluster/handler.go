@@ -14,6 +14,7 @@ import (
 
 func ClusterHandlers() {
 	m := map[string]HandlerFunc{
+		"heartbeat":               heartbeat,
 		"docker_status":           dockerStatus,
 		"docker_event":            dockerEvent,
 		"docker_images":           dockerImages,
@@ -32,14 +33,22 @@ func ClusterHandlers() {
 	}
 }
 
+// 心跳
+func heartbeat(c *utils.Connection, data []byte) {
+	c.SendSuccessResultString("heartbeat", "")
+}
+
+// docker主机状态
 func dockerStatus(c *utils.Connection, data []byte) {
 	log.Println("Status:", string(data))
 }
 
+// docker事件
 func dockerEvent(c *utils.Connection, data []byte) {
 	log.Println("Event:", string(data))
 }
 
+// docker主机上的镜像
 func dockerImages(c *utils.Connection, data []byte) {
 	dst := engine.NewTable("", 0)
 	if _, err := dst.ReadListFrom(data); err != nil {
@@ -52,6 +61,7 @@ func dockerImages(c *utils.Connection, data []byte) {
 	}
 }
 
+// docker主机上的容器
 func dockerContainers(c *utils.Connection, data []byte) {
 	dst := engine.NewTable("", 0)
 	if _, err := dst.ReadListFrom(data); err != nil {

@@ -107,12 +107,12 @@ func (this *Proxy) httpProxy(host string, w http.ResponseWriter, r *http.Request
 		response: w,
 	}
 	// 仅支持http1.0和1.1
-	if !isProtocolSupported(request) {
+	if !isProtocolSupported(r) {
 		handler.unsupportedProtocol()
 		return
 	}
 	// 负载均衡健康检查
-	if isLoadBalancerHeartbeat(request) {
+	if isLoadBalancerHeartbeat(r) {
 		handler.heartbeat()
 		return
 	}
@@ -120,12 +120,12 @@ func (this *Proxy) httpProxy(host string, w http.ResponseWriter, r *http.Request
 		handler.missingRoute(host)
 		return
 	}
-	if isTcpUpgrade(request) {
+	if isTcpUpgrade(r) {
 		handler.tcpRequest(host)
 		return
 	}
 	// websocket代理支持
-	if isWebSocketUpgrade(request) {
+	if isWebSocketUpgrade(r) {
 		handler.webSocketRequest(host)
 		return
 	}

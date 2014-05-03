@@ -57,12 +57,12 @@ func serve(conn net.Conn) {
 		}
 		cmd, payload = utils.CmdDecode(n, data)
 
-		log.Printf("Controller receive Cmd:%s, payload:%s", cmd, string(payload))
+		log.Printf("Controller receive cmd:%s, payload:%s", cmd, string(payload))
 
 		if handler, ok = ClusterSwitcher.handlers[cmd]; ok {
 			handler(connection, payload)
 		} else {
-			log.Println(cmd, "does not exist")
+			log.Printf("Command[%s] does not exist", cmd)
 		}
 	}
 }

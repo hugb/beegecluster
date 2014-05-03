@@ -8,8 +8,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/hugb/beegecontroller/config"
-	"github.com/hugb/beegecontroller/utils"
+	"github.com/hugb/beegecluster/config"
+	"github.com/hugb/beegecluster/utils"
 )
 
 // controller监听docker的连接
@@ -62,7 +62,7 @@ func serve(conn net.Conn) {
 		if handler, ok = ClusterSwitcher.handlers[cmd]; ok {
 			handler(connection, payload)
 		} else {
-			connection.SendFailsResult(cmd, "Command does not exist")
+			log.Println(cmd, "does not exist")
 		}
 	}
 }

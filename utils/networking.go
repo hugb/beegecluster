@@ -48,43 +48,17 @@ func (this *Connection) Read() (int, []byte, error) {
 }
 
 //封装成固定的消息格式"data flag"，数据与表示以空格分隔
-func (this *Connection) WriteBytes(suffix string, data []byte) error {
+func (this *Connection) SendCommandString(cmd string, data string) (int, error) {
+	return this.Conn.Write(PacketString(fmt.Sprintf("%s %s", data, cmd)))
+}
+
+func (this *Connection) SendCommandBytes(cmd string, data []byte) (int, error) {
 	data = append(data, 32)
-	data = append(data, suffix...)
-	_, err := this.Conn.Write(PacketByes(data))
-	return err
+	data = append(data, cmd...)
+	return this.Conn.Write(PacketByes(data))
 }
 
-func (this *Connection) WriteString(suffix string, data string) error {
-	_, err := this.Conn.Write(PacketString(fmt.Sprintf("%s %s", data, suffix)))
-	return err
-}
-
-func (this *Connection) SendFailsResult(cmd, data string) error {
-	return this.WriteString(fmt.Sprintf("%s %s", FAILURE, cmd), data)
-}
-
-func (this *Connection) SendSuccessResultString(cmd, data string) error {
-	return this.WriteString(fmt.Sprintf("%s %s", SUCCESS, cmd), data)
-}
-
-func (this *Connection) SendSuccessResultBytes(cmd string, data []byte) error {
-	return this.WriteBytes(fmt.Sprintf("%s %s", SUCCESS, cmd), data)
-}
-
-func (this *Connection) SendCommand(cmd string) error {
-	return this.WriteString(cmd, "")
-}
-
-func (this *Connection) SendCommandString(cmd string, data string) error {
-	return this.WriteString(cmd, data)
-}
-
-func (this *Connection) SendCommandBytes(cmd string, data []byte) error {
-	return this.WriteBytes(cmd, data)
-}
-
-// 读取指定长度的数据
+// 读取m个字节的数据
 func (this *Connection) packetData(m int) (data []byte, err error) {
 	data = make([]byte, m)
 	for l, n := 0, 0; n < m; {
@@ -99,23 +73,17 @@ func (this *Connection) packetData(m int) (data []byte, err error) {
 
 //解析命令，从"payload command"得到命令为command，数据为payload
 func CmdDecode(length int, data []byte) (string, []byte) {
+	// 找到分隔符位置
 	blankIndex := length - 1
 	for ; blankIndex >= 0; blankIndex-- {
 		if data[blankIndex] == 32 {
 			break
 		}
 	}
-
+	// 解析出命令和数据
 	if blankIndex >= 0 {
 		return string(data[blankIndex+1 : length]), data[0:blankIndex]
 	} else {
 		return "", data
 	}
-}
-
-// 解析命令返回的结果，从"data code command"
-func CmdResultDecode(length int, data []byte) (string, string, []byte) {
-	cmd, result := CmdDecode(length, data)
-	code, payload := CmdDecode(len(result), result)
-	return cmd, code, payload
 }

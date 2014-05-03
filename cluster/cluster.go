@@ -12,8 +12,8 @@ import (
 	"github.com/dotcloud/docker/engine"
 	dockerUtils "github.com/dotcloud/docker/utils"
 
-	"github.com/hugb/beegecontroller/config"
-	"github.com/hugb/beegecontroller/utils"
+	"github.com/hugb/beegecluster/config"
+	"github.com/hugb/beegecluster/utils"
 )
 
 var connCloseCh chan string
@@ -21,14 +21,14 @@ var connCloseCh chan string
 // 我要加入组织
 func ControllerJoinCluster() {
 	// 得到各个分社的领导人姓名
-	getController(config.CS.JoinPoint, "controller")
+	getController(config.CS.JoinPoint)
 	// 所有领导人
 	log.Println("Controllers:", config.CS.ClusterServer.Controller)
 }
 
 func DockerJoinCluster(eng *engine.Engine) {
 	// 获取所有controller的集群内部通信地址
-	getController(config.CS.JoinPoint, "docker")
+	getController(config.CS.JoinPoint)
 
 	log.Println("Controllers:", config.CS.ClusterServer.Controller)
 
@@ -163,7 +163,6 @@ func connectController(address string, wg *sync.WaitGroup) {
 		exist      bool
 		err        error
 		cmd        string
-		code       string
 		data       []byte
 		payload    []byte
 		conn       net.Conn
@@ -193,8 +192,10 @@ func connectController(address string, wg *sync.WaitGroup) {
 		if length, data, err = connection.Read(); err != nil {
 			break
 		}
-		cmd, code, payload = utils.CmdResultDecode(length, data)
-		log.Printf("Cmd:%s,code:%s,data:%s", cmd, code, string(payload))
+		cmd, payload = utils.CmdDecode(length, data)
+
+		log.Printf("Cmd:%s,data:%s", cmd, string(payload))
+
 		if handler, exist = ClusterSwitcher.handlers[cmd]; exist {
 			handler(connection, payload)
 		}
@@ -202,7 +203,7 @@ func connectController(address string, wg *sync.WaitGroup) {
 }
 
 // 由入口地址得到所有的controller
-func getController(address, from string) {
+func getController(address string) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		panic(err)
@@ -212,33 +213,26 @@ func getController(address, from string) {
 
 	defer func() { conn.Close() }()
 
-	if from == "docker" {
-		connection.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ServiceAddress)
-	}
-	if from == "controller" {
-		connection.WriteString(fmt.Sprintf("%s_join_cluster", from), config.CS.ClusterAddress)
-	}
+	connection.SendCommandString(fmt.Sprintf("%s_join_cluster", config.Role), config.CS.ClusterAddress)
 
 	lenght, data, err := connection.Read()
 	if err != nil {
-		return
+		panic(err)
 	}
 
-	cmd, code, payload := utils.CmdResultDecode(lenght, data)
-	log.Printf("Cmd:%s, code:%s, payload:%s", cmd, code, string(payload))
-	if code == utils.FAILURE {
-		return
-	}
+	cmd, payload := utils.CmdDecode(lenght, data)
+
+	log.Printf("Cmd:%s, payload:%s", cmd, string(payload))
 
 	var controllers map[string]int64
 	if err = json.Unmarshal(payload, &controllers); err != nil {
-		log.Println("Decode json error:", err)
+		panic(err)
 	}
 
 	for address, _ := range controllers {
 		if _, exist := config.CS.ClusterServer.Controller[address]; !exist {
 			config.CS.ClusterServer.Controller[address] = time.Now().Unix()
-			getController(address, from)
+			getController(address)
 		}
 	}
 }

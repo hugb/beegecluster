@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hugb/beegecontroller/utils"
+	"github.com/hugb/beegecluster/utils"
 )
 
 const (
@@ -61,7 +61,7 @@ func (this *Switcher) Unicast(address string, data []byte) {
 	for conn, _ := range this.connections {
 		// todo:只有docker的连接src才不为空
 		if conn.Src == address {
-			conn.SendSuccessResultBytes("unicast", data)
+			conn.SendCommandBytes("unicast", data)
 		}
 	}
 }

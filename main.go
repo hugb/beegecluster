@@ -9,9 +9,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/hugb/beegecontroller/cluster"
-	"github.com/hugb/beegecontroller/config"
-	"github.com/hugb/beegecontroller/proxy"
+	"github.com/hugb/beegecluster/cluster"
+	"github.com/hugb/beegecluster/config"
+	"github.com/hugb/beegecluster/proxy"
 )
 
 func main() {
@@ -30,6 +30,8 @@ func main() {
 	}
 
 	// 保存配置
+	config.Role = config.ControllerRoleName
+
 	config.CS.JoinPoint = *joinPoint
 	config.CS.ServiceAddress = *serviceAddress
 	config.CS.ClusterAddress = *clusterAddress
@@ -62,8 +64,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/hugb/beegecontroller/cluster"
-	"github.com/hugb/beegecontroller/config"
+	"github.com/hugb/beegecluster/cluster"
+	"github.com/hugb/beegecluster/config"
 )
 
 func main() {
@@ -105,7 +107,7 @@ if *flJoinPoint == "" {
 
 // 保存配置
 config.CS.JoinPoint = *flJoinPoint
-config.CS.ServiceAddress = flHosts.GetAll()[0]
+config.CS.ClusterAddress = flHosts.GetAll()[0]
 config.CS.ClusterServer.Controller[*flJoinPoint] = time.Now().Unix()
 config.CS.ClusterServer.Docker[flHosts.GetAll()[0]] = time.Now().Unix()
 

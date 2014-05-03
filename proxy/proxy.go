@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/hugb/beegecontroller/config"
+	"github.com/hugb/beegecluster/config"
 )
 
 type Proxy struct {

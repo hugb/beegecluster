@@ -4,8 +4,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/hugb/beegecontroller/config"
-	"github.com/hugb/beegecontroller/resource"
+	"github.com/hugb/beegecluster/config"
+	"github.com/hugb/beegecluster/resource"
 )
 
 type Registry struct {

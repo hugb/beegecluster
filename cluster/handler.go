@@ -8,8 +8,8 @@ import (
 
 	"github.com/dotcloud/docker/engine"
 
-	"github.com/hugb/beegecontroller/config"
-	"github.com/hugb/beegecontroller/utils"
+	"github.com/hugb/beegecluster/config"
+	"github.com/hugb/beegecluster/utils"
 )
 
 func ClusterHandlers() {
@@ -35,7 +35,7 @@ func ClusterHandlers() {
 
 // 心跳
 func heartbeat(c *utils.Connection, data []byte) {
-	c.SendSuccessResultString("heartbeat", "")
+	c.SendCommandString("heartbeat", config.CS.ClusterAddress)
 }
 
 // docker主机状态
@@ -92,10 +92,10 @@ func dockerJoinCluster(c *utils.Connection, data []byte) {
 	b, err := json.Marshal(config.CS.ClusterServer.Controller)
 	if err != nil {
 		// 我收集的资料有误
-		c.SendFailsResult("docker_join_cluster", fmt.Sprintf("%s", err))
+		c.SendCommandString("docker_join_cluster", "")
 	} else {
 		// 告知其组织的领导层所有人员姓名
-		c.SendSuccessResultBytes("docker_join_cluster", b)
+		c.SendCommandBytes("docker_join_cluster", b)
 	}
 }
 
@@ -107,9 +107,10 @@ func controllerJoinCluster(c *utils.Connection, data []byte) {
 	// 把我以前结拜的所有兄弟告诉他，让他们也认识一下
 	b, err := json.Marshal(config.CS.ClusterServer.Controller)
 	if err != nil {
-		c.SendFailsResult("controller_join_cluster", fmt.Sprintf("%s", err))
+		log.Println(err)
+		c.SendCommandString("controller_join_cluster", "")
 	} else {
-		c.SendSuccessResultBytes("controller_join_cluster", b)
+		c.SendCommandBytes("controller_join_cluster", b)
 	}
 	// 先断开连接，以免其收到广播我发给小弟的通知
 	c.Conn.Close()

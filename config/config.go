@@ -1,23 +1,12 @@
 package config
 
-type ClusterServer struct {
-	Docker     map[string]int64
-	Controller map[string]int64
-}
+var (
+	Role string
 
-var defaultClusterServer = ClusterServer{
-	Docker:     make(map[string]int64),
-	Controller: make(map[string]int64),
-}
-
-var CS = &Config{
-	ClusterServer: defaultClusterServer,
-}
-
-type Config struct {
-	JoinPoint      string
+	JoinAddress    string
 	ServiceAddress string
 	ClusterAddress string
 
-	ClusterServer ClusterServer
-}
+	Dockers     = make(map[string]int64)
+	Controllers = make(map[string]int64)
+)

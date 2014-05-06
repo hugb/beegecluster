@@ -19,7 +19,7 @@ func NewClusterServer() {
 		conn net.Conn
 		ln   net.Listener
 	)
-	if ln, err = net.Listen("tcp", config.CS.ClusterAddress); err != nil {
+	if ln, err = net.Listen("tcp", config.ClusterAddress); err != nil {
 		panic(err)
 	}
 	for {
@@ -57,7 +57,7 @@ func serve(conn net.Conn) {
 		}
 		cmd, payload = utils.CmdDecode(n, data)
 
-		log.Printf("Controller receive cmd:%s, payload:%s", cmd, string(payload))
+		log.Printf("Controller receive cmd:%s", cmd)
 
 		if handler, ok = ClusterSwitcher.handlers[cmd]; ok {
 			handler(connection, payload)

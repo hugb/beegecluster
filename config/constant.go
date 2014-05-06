@@ -1,8 +1,6 @@
 package config
 
-var (
-	Role = "docker"
-
+const (
 	DockerRoleName     = "docker"
 	ControllerRoleName = "controller"
 )

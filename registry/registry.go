@@ -4,26 +4,19 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/hugb/beegecluster/config"
 	"github.com/hugb/beegecluster/resource"
 )
 
 type Registry struct {
 	sync.RWMutex
 
-	config *config.Config
-
 	images     map[string]*resource.Image
 	containers map[string]*resource.Container
 }
 
-func NewRegistry(c *config.Config) (*Registry, error) {
-	r := &Registry{
-		config:     c,
-		images:     make(map[string]*resource.Image),
-		containers: make(map[string]*resource.Container),
-	}
-	return r, nil
+var RegistryServer = &Registry{
+	images:     make(map[string]*resource.Image),
+	containers: make(map[string]*resource.Container),
 }
 
 func (this *Registry) RegisterImage(id string, image *resource.Image) {

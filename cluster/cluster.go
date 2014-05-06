@@ -6,7 +6,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
+	gosignal "os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/dotcloud/docker/engine"
@@ -16,54 +19,67 @@ import (
 	"github.com/hugb/beegecluster/utils"
 )
 
-var connCloseCh chan string
+var (
+	Eng *engine.Engine
+
+	waitGroup sync.WaitGroup
+
+	connCloseCh chan string
+)
 
 // 我要加入组织
 func ControllerJoinCluster() {
 	// 得到各个分社的领导人姓名
-	getController(config.CS.JoinPoint)
+	getController(config.JoinAddress)
 	// 所有领导人
-	log.Println("Controllers:", config.CS.ClusterServer.Controller)
+	log.Println("Controllers:", config.Controllers)
 }
 
 func DockerJoinCluster(eng *engine.Engine) {
+	Eng = eng
+	// 捕获系统信号
+	c := make(chan os.Signal, 1)
+	gosignal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		for sig := range c {
+			// os.Interrupt=ctrl+c
+			log.Printf("Received signal '%v'", sig)
+		}
+	}()
+
 	// 获取所有controller的集群内部通信地址
-	getController(config.CS.JoinPoint)
+	getController(config.JoinAddress)
 
-	log.Println("Controllers:", config.CS.ClusterServer.Controller)
+	log.Println("Controllers:", config.Controllers)
 
-	connCloseCh = make(chan string, 2)
+	connCloseCh = make(chan string, 10)
 
 	// 连接所有controller
-	var wg sync.WaitGroup
-	for address, _ := range config.CS.ClusterServer.Controller {
-		wg.Add(1)
-		go connectController(address, &wg)
+	for address, _ := range config.Controllers {
+		waitGroup.Add(1)
+		go connectController(address)
 	}
 	// 等待docker与controller所有连接完成
-	wg.Wait()
+	waitGroup.Wait()
 
 	// 监听到连接断开进行重连
 	go reConnectController()
-
-	// 首付
-	reportImagesAndContainers(eng)
-	log.Println("Report images and containers finish")
 
 	// 每月还贷
 	go reportStatus()
 
 	// 事件上报
-	if err := reportEvents(eng); err != nil {
+	if err := reportEvents(); err != nil {
 		log.Println("Report event error:", err)
 	}
+
 	log.Println("Event report finish")
 }
 
-func reportImagesAndContainers(eng *engine.Engine) error {
+func reportImagesAndContainers(c *utils.Connection) error {
 	// 读取镜像列表
 	log.Println("Report images start.")
-	imageJob := eng.Job("images")
+	imageJob := Eng.Job("images")
 	imageJob.Setenv("filter", "")
 	imageJob.Setenv("all", "0")
 	imageSrc, err := imageJob.Stdout.AddPipe()
@@ -76,15 +92,14 @@ func reportImagesAndContainers(eng *engine.Engine) error {
 		if err != nil {
 			log.Println("Read data error from pipe:", err)
 		}
-		images := utils.PacketByes(append(imagesBytes, " docker_images"...))
-		ClusterSwitcher.Broadcast(images)
+		c.SendCommandBytes("docker_images", imagesBytes)
 	}()
 	if err := imageJob.Run(); err != nil {
 		return err
 	}
 	// 读取容器列表
 	log.Println("Report containers start")
-	containerJob := eng.Job("containers")
+	containerJob := Eng.Job("containers")
 	containerJob.Setenv("all", "1")
 	containerSrc, err := containerJob.Stdout.AddPipe()
 	if err != nil {
@@ -96,15 +111,15 @@ func reportImagesAndContainers(eng *engine.Engine) error {
 		if err != nil {
 			log.Println("Read data error from pipe:", err)
 		}
-		containers := utils.PacketByes(append(containersBytes, " docker_containers"...))
-		ClusterSwitcher.Broadcast(containers)
+		c.SendCommandBytes("docker_containers", containersBytes)
 	}()
 
 	return containerJob.Run()
 }
 
-func reportEvents(eng *engine.Engine) error {
-	job := eng.Job("events", "DockerAgent")
+// 上报docker事件
+func reportEvents() error {
+	job := Eng.Job("events", "DockerAgent")
 	// 从当前到3214080000（100年）后,^-^100后我都不在了，还需要考虑超时吗
 	job.Setenv("since", fmt.Sprint(time.Now().Unix()))
 	job.Setenv("until", fmt.Sprint(time.Now().Unix()+3214080000))
@@ -133,6 +148,7 @@ func reportEvents(eng *engine.Engine) error {
 	return job.Run()
 }
 
+// 上报docker主机状态
 func reportStatus() {
 	log.Println("Report status start")
 	tick := time.Tick(time.Duration(5) * time.Second)
@@ -148,8 +164,8 @@ func reportStatus() {
 			if err != nil {
 				log.Println("Encode system info error:", err)
 			}
-			log.Println("System info:", string(systemInfoBytes))
-			data := utils.PacketByes(append(systemInfoBytes, " docker_stataus"...))
+			log.Println("Report status...")
+			data := utils.PacketByes(append(systemInfoBytes, " docker_status"...))
 			ClusterSwitcher.Broadcast(data)
 		}
 	}
@@ -157,7 +173,8 @@ func reportStatus() {
 }
 
 // docker连接到controller，保持着
-func connectController(address string, wg *sync.WaitGroup) {
+func connectController(address string) {
+	defer func() { connCloseCh <- address }()
 	var (
 		length     int
 		exist      bool
@@ -169,9 +186,13 @@ func connectController(address string, wg *sync.WaitGroup) {
 		handler    HandlerFunc
 		connection *utils.Connection
 	)
+
+	log.Printf("Connect controller %s", address)
+
 	conn, err = net.Dial("tcp", address)
 	if err != nil {
-		panic(err)
+		log.Printf("Connect controller %s error:%s", address, err)
+		return
 	}
 	connection = &utils.Connection{
 		Conn: conn,
@@ -181,12 +202,12 @@ func connectController(address string, wg *sync.WaitGroup) {
 
 	defer func() {
 		conn.Close()
-		connCloseCh <- address
 		ClusterSwitcher.unregister <- connection
 	}()
 
-	wg.Done()
-	connection.SendCommandString("docker_greetings", config.CS.ServiceAddress)
+	waitGroup.Done()
+
+	connection.SendCommandString("docker_greetings", config.ClusterAddress)
 
 	for {
 		if length, data, err = connection.Read(); err != nil {
@@ -194,12 +215,15 @@ func connectController(address string, wg *sync.WaitGroup) {
 		}
 		cmd, payload = utils.CmdDecode(length, data)
 
-		log.Printf("Cmd:%s,data:%s", cmd, string(payload))
+		log.Printf("Cmd:%s", cmd)
 
 		if handler, exist = ClusterSwitcher.handlers[cmd]; exist {
 			handler(connection, payload)
+		} else {
+			log.Printf("Command[%s] is not exist", cmd)
 		}
 	}
+	log.Printf("Controller %s is disconnect", address)
 }
 
 // 由入口地址得到所有的controller
@@ -213,7 +237,8 @@ func getController(address string) {
 
 	defer func() { conn.Close() }()
 
-	connection.SendCommandString(fmt.Sprintf("%s_join_cluster", config.Role), config.CS.ClusterAddress)
+	log.Println("Get all controllers request")
+	connection.SendCommandString(fmt.Sprintf("%s_join", config.Role), config.ClusterAddress)
 
 	lenght, data, err := connection.Read()
 	if err != nil {
@@ -222,7 +247,7 @@ func getController(address string) {
 
 	cmd, payload := utils.CmdDecode(lenght, data)
 
-	log.Printf("Cmd:%s, payload:%s", cmd, string(payload))
+	log.Printf("Response cmd:%s, payload:%s", cmd, string(payload))
 
 	var controllers map[string]int64
 	if err = json.Unmarshal(payload, &controllers); err != nil {
@@ -230,8 +255,8 @@ func getController(address string) {
 	}
 
 	for address, _ := range controllers {
-		if _, exist := config.CS.ClusterServer.Controller[address]; !exist {
-			config.CS.ClusterServer.Controller[address] = time.Now().Unix()
+		if _, exist := config.Controllers[address]; !exist {
+			config.Controllers[address] = time.Now().Unix()
 			getController(address)
 		}
 	}
@@ -240,16 +265,26 @@ func getController(address string) {
 // 重新连接到Controller
 func reConnectController() {
 	var (
-		address   string
-		waitGroup sync.WaitGroup
+		ok      bool
+		address string
 	)
-	for {
-		address = <-connCloseCh
+	for address = range connCloseCh {
+		// 广播控制器已经离线
+		//log.Printf("Broadcast controller[%s] is offline", address)
+		//message := fmt.Sprintf("%s %s", address, "controller_offline")
+		//ClusterSwitcher.Broadcast(utils.PacketString(message))
+
+		if _, ok = config.Controllers[address]; ok {
+			continue
+		}
+
+		for i := 3; i > 0; i-- {
+			log.Printf("Wait %d seconed reconnect %s", i, address)
+			time.Sleep(1 * time.Second)
+		}
 
 		waitGroup.Add(1)
-		connectController(address, &waitGroup)
+		go connectController(address)
 		waitGroup.Wait()
-		// todo:是否需要再次上报
-
 	}
 }

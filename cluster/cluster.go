@@ -174,7 +174,7 @@ func reportStatus() {
 
 // docker连接到controller，保持着
 func connectController(address string) {
-	defer func() { connCloseCh <- address }()
+
 	var (
 		length     int
 		exist      bool
@@ -187,13 +187,17 @@ func connectController(address string) {
 		connection *utils.Connection
 	)
 
+	defer func() { connCloseCh <- address }()
+
 	log.Printf("Connect controller %s", address)
 
 	conn, err = net.Dial("tcp", address)
 	if err != nil {
-		log.Printf("Connect controller %s error:%s", address, err)
+		log.Println(err)
+		waitGroup.Done()
 		return
 	}
+
 	connection = &utils.Connection{
 		Conn: conn,
 		Src:  address,
@@ -206,7 +210,6 @@ func connectController(address string) {
 	}()
 
 	waitGroup.Done()
-
 	connection.SendCommandString("docker_greetings", config.ClusterAddress)
 
 	for {
@@ -268,19 +271,17 @@ func reConnectController() {
 		ok      bool
 		address string
 	)
-	for address = range connCloseCh {
-		// 广播控制器已经离线
-		//log.Printf("Broadcast controller[%s] is offline", address)
-		//message := fmt.Sprintf("%s %s", address, "controller_offline")
-		//ClusterSwitcher.Broadcast(utils.PacketString(message))
-
-		if _, ok = config.Controllers[address]; ok {
-			continue
-		}
+	for {
+		address = <-connCloseCh
 
 		for i := 3; i > 0; i-- {
 			log.Printf("Wait %d seconed reconnect %s", i, address)
 			time.Sleep(1 * time.Second)
+		}
+
+		if _, ok = config.Controllers[address]; ok {
+			log.Printf("[%s] has been working, abandon reconnection", address)
+			continue
 		}
 
 		waitGroup.Add(1)

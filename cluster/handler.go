@@ -143,9 +143,8 @@ func controllerOffline(c *utils.Connection, data []byte) {
 // 新的controller加入，docker需要连接到它
 func controllerJoinToDocker(c *utils.Connection, data []byte) {
 	address := string(data)
-	// 连接controller
 	log.Printf("Connect new controller %s", address)
-
+	// docker连接到新的controller
 	connCloseCh <- address
 }
 
